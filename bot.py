@@ -81,13 +81,10 @@ async def play(interaction: discord.Interaction, query: str):
         await interaction.followup.send("❌ Bot harus join voice channel dulu!")
         return
     
-    if guild.voice_client.is_playing():
-        guild.voice_client.stop()
-    
     try:
         await interaction.followup.send(f"🔍 Mencari: `{query}`...")
+        print(f"DEBUG: Searching {query}")
         
-        # Search YouTube
         cmd = [
             'yt-dlp',
             f'ytsearch:{query}',
@@ -97,13 +94,17 @@ async def play(interaction: discord.Interaction, query: str):
         ]
         
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        
+        print(f"DEBUG: stdout = {result.stdout}")
+        print(f"DEBUG: stderr = {result.stderr}")
+        print(f"DEBUG: returncode = {result.returncode}")
+        
         url = result.stdout.strip().split('\n')[0]
         
         if not url:
-            await interaction.followup.send("❌ Musik tidak ditemukan!")
+            await interaction.followup.send(f"❌ Musik tidak ditemukan!\nError: {result.stderr}")
             return
         
-        # Stream
         audio_source = discord.FFmpegPCMAudio(
             url,
             before_options='-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
@@ -112,15 +113,10 @@ async def play(interaction: discord.Interaction, query: str):
         
         guild.voice_client.play(audio_source)
         await interaction.followup.send(f"🎵 Playing: **{query}**")
-        print(f"Playing: {query}")
         
-    except subprocess.TimeoutExpired:
-        await interaction.followup.send("❌ Search timeout, coba lagi!")
     except Exception as e:
         print(f"ERROR: {repr(e)}")
-        await interaction.followup.send(f"❌ Error: {type(e).__name__}")
-
-
+        await interaction.followup.send(f"❌ Error: {type(e).__name__}: {str(e)}")
 @bot.tree.command(name="stop", description="Stop music")
 async def stop(interaction: discord.Interaction):
     await interaction.response.defer()
