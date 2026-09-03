@@ -240,7 +240,7 @@ async def leave(interaction: discord.Interaction):
 
 
 @bot.tree.command(name="play", description="Cari dan putar musik menggunakan Lavalink")
-async def play(interaction: discord.Interaction, query: str):
+async def play(interaction: discord.Interaction, lagu: str):
 
     player = await ensure_in_voice(interaction)
     if player is None:
@@ -248,11 +248,11 @@ async def play(interaction: discord.Interaction, query: str):
 
     guild = interaction.guild
 
-    print(f"🔍 Searching for: {query}")
+    print(f"🔍 Searching for: {lagu}")
 
     # Search
     try:
-        tracks = await wavelink.Playable.search(query)
+        tracks = await wavelink.Playable.search(lagu)
         print(f"✅ Search result: {len(tracks)} track(s) found")
 
     except Exception as e:
@@ -261,8 +261,8 @@ async def play(interaction: discord.Interaction, query: str):
         return
 
     if not tracks:
-        print(f"❌ No tracks found for: {query}")
-        await interaction.followup.send(f"❌ Lagu `{query}` tidak ditemukan.")
+        print(f"❌ No tracks found for: {lagu}")
+        await interaction.followup.send(f"❌ Lagu `{lagu}` tidak ditemukan.")
         return
 
     # Handle playlist
