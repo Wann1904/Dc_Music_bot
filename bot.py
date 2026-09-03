@@ -130,12 +130,6 @@ async def on_wavelink_node_ready(payload: wavelink.NodeReadyEventPayload):
 
 
 @bot.event
-async def on_wavelink_node_down(payload: wavelink.NodeDownEventPayload):
-    print(f"❌ Lavalink node down: {payload.node.identifier}")
-    # Bot akan reconnect otomatis via wavelink
-
-
-@bot.event
 async def on_wavelink_track_end(payload: wavelink.TrackEndEventPayload):
     """Otomatis mainkan track berikutnya dari queue"""
     
