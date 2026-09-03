@@ -70,53 +70,54 @@ async def leave(interaction: discord.Interaction):
     except Exception as e:
         await interaction.followup.send(f"❌ Error: {type(e).__name__}")
 
-
-@bot.tree.command(name="play", description="Play musik dari YouTube")
+@bot.tree.command(name="play", description="Play musik lokal by name")
 async def play(interaction: discord.Interaction, query: str):
     await interaction.response.defer()
     
     guild = interaction.guild
     
     if guild.voice_client is None:
-        await interaction.followup.send("❌ Bot harus join voice channel dulu!")
+        await interaction.followup.send("❌ Bot harus join VC dulu!")
         return
     
+    music_dir = "music"
+    
+    # Cari file yang match query
+    files = [f for f in os.listdir(music_dir) if f.endswith('.mp3')]
+    
+    # Fuzzy search - case insensitive
+    matching = [f for f in files if query.lower() in f.lower()]
+    
+    if not matching:
+        await interaction.followup.send(f"❌ Musik `{query}` tidak ditemukan!")
+        await interaction.followup.send(f"Coba: `/list` untuk lihat semua musik")
+        return
+    
+    if len(matching) > 1:
+        msg = f"🔍 Found {len(matching)} matches:\n"
+        for i, file in enumerate(matching[:10], 1):
+            msg += f"{i}. {file}\n"
+        msg += f"\nGunakan nama yang lebih spesifik!"
+        await interaction.followup.send(msg)
+        return
+    
+    # Play lagu yang cocok
+    filename = matching[0]
+    music_path = os.path.join(music_dir, filename)
+    
+    if guild.voice_client.is_playing():
+        guild.voice_client.stop()
+    
     try:
-        await interaction.followup.send(f"🔍 Mencari: `{query}`...")
-        print(f"DEBUG: Searching {query}")
-        
-        cmd = [
-            'yt-dlp',
-            f'ytsearch:{query}',
-            '-f', 'bestaudio/best',
-            '-g',
-            '-q'
-        ]
-        
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-        
-        print(f"DEBUG: stdout = {result.stdout}")
-        print(f"DEBUG: stderr = {result.stderr}")
-        print(f"DEBUG: returncode = {result.returncode}")
-        
-        url = result.stdout.strip().split('\n')[0]
-        
-        if not url:
-            await interaction.followup.send(f"❌ Musik tidak ditemukan!\nError: {result.stderr}")
-            return
-        
-        audio_source = discord.FFmpegPCMAudio(
-            url,
-            before_options='-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
-            options='-vn'
-        )
-        
+        audio_source = discord.FFmpegPCMAudio(music_path)
         guild.voice_client.play(audio_source)
-        await interaction.followup.send(f"🎵 Playing: **{query}**")
         
+        # Tampilkan nama lagu tanpa .mp3
+        song_name = filename.replace('.mp3', '')
+        await interaction.followup.send(f"🎵 Now Playing: **{song_name}**")
+        print(f"Playing: {filename}")
     except Exception as e:
-        print(f"ERROR: {repr(e)}")
-        await interaction.followup.send(f"❌ Error: {type(e).__name__}: {str(e)}")
+        await interaction.followup.send(f"❌ Error: {type(e).__name__}")
 @bot.tree.command(name="stop", description="Stop music")
 async def stop(interaction: discord.Interaction):
     await interaction.response.defer()
