@@ -248,22 +248,43 @@ async def play(interaction: discord.Interaction, lagu: str):
 
     guild = interaction.guild
 
-    print(f"🔍 Searching for: {lagu}")
+    print(f"\n🔍 === SEARCH START ===")
+    print(f"🔍 Query: {lagu}")
+    print(f"🔍 Player: {player}")
+    print(f"🔍 Player Node: {player.node}")
+    
+    # Search with YouTube source
+    tracks = None
+    sources = ["ytsearch", "scsearch"]  # YouTube, SoundCloud
+    
+    for source in sources:
+        try:
+            search_query = f"{source}:{lagu}"
+            print(f"🔍 Trying source: {source}")
+            print(f"🔍 Query: {search_query}")
+            
+            tracks = await wavelink.Playable.search(search_query)
+            
+            print(f"🔍 Search response type: {type(tracks)}")
+            
+            if tracks:
+                print(f"✅ Found {len(tracks)} track(s) from {source}")
+                break
+            else:
+                print(f"❌ No results from {source}")
 
-    # Search
-    try:
-        tracks = await wavelink.Playable.search(lagu)
-        print(f"✅ Search result: {len(tracks)} track(s) found")
-
-    except Exception as e:
-        print(f"❌ Search error: {type(e).__name__}: {e}")
-        await interaction.followup.send(f"❌ Gagal mencari lagu: `{type(e).__name__}: {str(e)[:100]}`")
-        return
-
+        except Exception as e:
+            print(f"❌ Search error on {source}: {type(e).__name__}: {e}")
+            continue
+    
     if not tracks:
-        print(f"❌ No tracks found for: {lagu}")
-        await interaction.followup.send(f"❌ Lagu `{lagu}` tidak ditemukan.")
+        print(f"❌ All sources exhausted, no tracks found")
+        import traceback
+        traceback.print_exc()
+        await interaction.followup.send(f"❌ Gagal mencari lagu `{lagu}`. Pastikan Lavalink punya YouTube plugin!")
         return
+
+
 
     # Handle playlist
     if isinstance(tracks, wavelink.Playlist):
@@ -296,9 +317,13 @@ async def play(interaction: discord.Interaction, lagu: str):
             print(f"▶️ Starting to play: {track.title}")
             await player.play(track)
             await interaction.followup.send(f"🎵 Now Playing: **{track.title}**")
+        
+        print(f"🔍 === SEARCH END (SUCCESS) ===\n")
 
     except Exception as e:
         print(f"❌ Play error: {type(e).__name__}: {e}")
+        import traceback
+        traceback.print_exc()
         await interaction.followup.send(f"❌ Error playing track: `{type(e).__name__}: {str(e)[:100]}`")
 
 
