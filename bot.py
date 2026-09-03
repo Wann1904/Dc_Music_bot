@@ -15,7 +15,6 @@ intents.guilds = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-
 @bot.event
 async def on_ready():
     if not wavelink.Pool.nodes:
@@ -23,8 +22,7 @@ async def on_ready():
             client=bot,
             nodes=[
                 wavelink.Node(
-                    host="tokaido.proxy.rlwy.net",
-                    port="30072",
+                    uri="http://tokaido.proxy.rlwy.net:30072",
                     password="wanmusic123"
                 )
             ]
@@ -35,8 +33,7 @@ async def on_ready():
     print(f"✅ Bot sudah online sebagai {bot.user}")
     print(f"Bot di {len(bot.guilds)} server")
     print("Slash commands sudah disinkronkan!")
-
-
+    
 @bot.tree.command(name="ping", description="Test apakah bot online")
 async def ping(interaction: discord.Interaction):
     await interaction.response.send_message("🎵 Djawa Adalah Koentji👹👹")
