@@ -37,6 +37,9 @@ class WanMusic(commands.Bot):
         """Connect to Lavalink before the bot becomes ready."""
 
         try:
+            print(f"🔌 Connecting to Lavalink...")
+            print(f"   URI: {LAVALINK_URI}")
+            
             nodes = [
                 wavelink.Node(
                     uri=LAVALINK_URI,
@@ -46,9 +49,12 @@ class WanMusic(commands.Bot):
 
             await wavelink.Pool.connect(nodes=nodes, client=self)
             print("✅ Berhasil terhubung ke Lavalink!")
+            print(f"🎵 Lavalink siap untuk streaming musik")
 
         except Exception as e:
             print(f"❌ Gagal connect ke Lavalink: {type(e).__name__}: {e}")
+            print(f"⚠️  Pastikan Lavalink server berjalan di {LAVALINK_URI}")
+            print(f"⚠️  Password: {LAVALINK_PASSWORD}")
 
 
 bot = WanMusic(command_prefix="!", intents=intents)
@@ -89,22 +95,25 @@ async def ensure_in_voice(interaction: discord.Interaction) -> wavelink.Player |
     # Bot belum connect
     if player is None:
         try:
+            print(f"🔗 Connecting to VC: {user_channel.name}")
             player = await user_channel.connect(cls=wavelink.Player)
             print(f"✅ Auto-join ke {user_channel.name}")
         except Exception as e:
             print(f"❌ Auto-join error: {type(e).__name__}: {e}")
-            await interaction.followup.send(f"❌ Gagal masuk VC: `{type(e).__name__}`")
+            await interaction.followup.send(f"❌ Gagal masuk VC: `{type(e).__name__}: {str(e)[:100]}`")
             return None
 
     # Bot di VC berbeda
     elif player.channel != user_channel:
         try:
+            print(f"🔄 Moving bot dari {player.channel.name} ke {user_channel.name}")
             await player.move_to(user_channel)
         except Exception as e:
             print(f"❌ Move error: {type(e).__name__}: {e}")
             await interaction.followup.send(f"❌ Gagal pindah VC: `{type(e).__name__}`")
             return None
 
+    print(f"✅ Player ready in {user_channel.name}")
     return player
 
 
@@ -134,12 +143,18 @@ async def on_wavelink_track_end(payload: wavelink.TrackEndEventPayload):
     """Otomatis mainkan track berikutnya dari queue"""
     
     player: wavelink.Player = payload.player
+    
+    print(f"⏹️ Track ended: {payload.track.title if payload.track else 'Unknown'}")
 
     if not player.queue.is_empty:
         track = player.queue.get()
-        await player.play(track)
+        print(f"▶️ Playing next track: {track.title}")
+        try:
+            await player.play(track)
+        except Exception as e:
+            print(f"❌ Error playing next track: {type(e).__name__}: {e}")
     else:
-        print(f"✅ Queue selesai di {player.guild.name}")
+        print(f"✅ Queue finished in {player.guild.name}")
 
 
 # =========================
@@ -233,41 +248,58 @@ async def play(interaction: discord.Interaction, query: str):
 
     guild = interaction.guild
 
+    print(f"🔍 Searching for: {query}")
+
     # Search
     try:
         tracks = await wavelink.Playable.search(query)
+        print(f"✅ Search result: {len(tracks)} track(s) found")
 
     except Exception as e:
         print(f"❌ Search error: {type(e).__name__}: {e}")
-        await interaction.followup.send(f"❌ Gagal mencari lagu: `{type(e).__name__}`")
+        await interaction.followup.send(f"❌ Gagal mencari lagu: `{type(e).__name__}: {str(e)[:100]}`")
         return
 
     if not tracks:
+        print(f"❌ No tracks found for: {query}")
         await interaction.followup.send(f"❌ Lagu `{query}` tidak ditemukan.")
         return
 
     # Handle playlist
     if isinstance(tracks, wavelink.Playlist):
         track_list = tracks.tracks
-        await player.queue.put_wait(track_list)
+        print(f"📋 Playlist found: {tracks.name} with {len(track_list)} tracks")
+        
+        try:
+            await player.queue.put_wait(track_list)
 
-        if not player.playing:
-            await player.play(track_list[0])
+            if not player.playing:
+                await player.play(track_list[0])
+                print(f"🎵 Playing first track from playlist: {track_list[0].title}")
 
-        await interaction.followup.send(f"🎵 Playlist **{tracks.name}** ditambahkan ({len(track_list)} lagu).")
+            await interaction.followup.send(f"🎵 Playlist **{tracks.name}** ditambahkan ({len(track_list)} lagu).")
+        except Exception as e:
+            print(f"❌ Playlist play error: {type(e).__name__}: {e}")
+            await interaction.followup.send(f"❌ Error playing playlist: `{type(e).__name__}`")
         return
 
     # Handle single track
     track = tracks[0]
+    print(f"🎵 Track found: {track.title} (ID: {track.identifier})")
 
-    if player.playing:
-        await player.queue.put_wait(track)
-        await interaction.followup.send(f"➕ Ditambahkan ke queue: **{track.title}**")
-    else:
-        await player.play(track)
-        await interaction.followup.send(f"🎵 Now Playing: **{track.title}**")
+    try:
+        if player.playing:
+            await player.queue.put_wait(track)
+            print(f"➕ Added to queue: {track.title}")
+            await interaction.followup.send(f"➕ Ditambahkan ke queue: **{track.title}**")
+        else:
+            print(f"▶️ Starting to play: {track.title}")
+            await player.play(track)
+            await interaction.followup.send(f"🎵 Now Playing: **{track.title}**")
 
-    print(f"🎵 Playing: {track.title}")
+    except Exception as e:
+        print(f"❌ Play error: {type(e).__name__}: {e}")
+        await interaction.followup.send(f"❌ Error playing track: `{type(e).__name__}: {str(e)[:100]}`")
 
 
 @bot.tree.command(name="stop", description="Stop musik")
