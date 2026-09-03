@@ -3,6 +3,7 @@ import discord
 from discord.ext import commands
 from dotenv import load_dotenv
 import subprocess
+import wavelink
 
 load_dotenv()
 
@@ -17,7 +18,20 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 
 @bot.event
 async def on_ready():
+    if not wavelink.Pool.nodes:
+        await wavelink.Pool.connect(
+            client=bot,
+            nodes=[
+                wavelink.Node(
+                    host="tokaido.proxy.rlwy.net",
+                    port="30072",
+                    password="wanmusic123"
+                )
+            ]
+        )
+
     await bot.tree.sync()
+
     print(f"✅ Bot sudah online sebagai {bot.user}")
     print(f"Bot di {len(bot.guilds)} server")
     print("Slash commands sudah disinkronkan!")
