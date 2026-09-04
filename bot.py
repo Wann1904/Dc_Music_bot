@@ -17,7 +17,7 @@ LAVALINK_PASSWORD = os.getenv("LAVALINK_PASSWORD", "wanmusic123")
 # Pakai endpoint Public Networking Railway lo
 LAVALINK_URI = os.getenv(
     "LAVALINK_URI",
-    "http://railwayservicelavalink-production.up.railway.app"
+    "http://tokaido.proxy.rlwy.net:30072"
 )
 
 
