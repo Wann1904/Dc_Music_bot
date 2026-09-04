@@ -20,6 +20,10 @@ LAVALINK_URI = os.getenv(
     "http://tokaido.proxy.rlwy.net:30072"
 )
 
+# Bersihkan Markdown link jika ada
+if LAVALINK_URI.startswith("[") and "](" in LAVALINK_URI:
+    LAVALINK_URI = LAVALINK_URI.split("](")[1].rstrip(")")
+
 
 # ============================================================
 # INTENTS
