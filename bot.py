@@ -63,30 +63,20 @@ class WanMusic(commands.Bot):
                 client=self,
             )
 
-            # Check node status sebelum bilang "berhasil"
-            import asyncio
-            await asyncio.sleep(2)  # Tunggu node siap
-            
-            if node.is_available():
-                self.lavalink_connected = True
-                print("✅ Lavalink connection berhasil!")
-            else:
-                print("⚠️ Lavalink node terhubung tapi belum ready")
-                print("   Kemungkinan password salah atau server dalam proses startup")
-                raise SystemExit(1)
+            print("✅ Lavalink connection berhasil!")
 
         except Exception as e:
             print(
                 f"❌ Gagal connect ke Lavalink: "
                 f"{type(e).__name__}: {e}"
             )
+
             print("\n💡 Pastikan:")
             print("   1. LAVALINK_URI benar di .env")
             print("   2. LAVALINK_PASSWORD benar di .env")
             print("   3. Lavalink server sedang running")
+
             raise SystemExit(1)
-
-
 bot = WanMusic(
     command_prefix="!",
     intents=intents,
