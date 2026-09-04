@@ -385,17 +385,19 @@ async def play(
     print("=" * 60)
 
     try:
-        # Direct URL
+    # Direct URL
         if lagu.startswith(("http://", "https://")):
             print("🌐 Loading direct URL...")
             results = await wavelink.Playable.search(lagu)
 
-        # SoundCloud search
+    # SoundCloud search
         else:
             print("🔎 Searching SoundCloud...")
+
             results = await wavelink.Playable.search(
-                f"scsearch:{lagu}"
-            )
+            lagu,
+            source=wavelink.TrackSource.SoundCloud
+        )
 
         print(
             f"📦 Result type: "
@@ -404,16 +406,16 @@ async def play(
 
     except Exception as e:
         print(
-            f"❌ Search error: "
-            f"{type(e).__name__}: {e}"
-        )
+        f"❌ Search error: "
+        f"{type(e).__name__}: {e}"
+    )
 
-        await interaction.followup.send(
-            f"❌ Lavalink gagal mencari lagu.\n"
-            f"Error: `{type(e).__name__}`"
-        )
+    await interaction.followup.send(
+        f"❌ Lavalink gagal mencari lagu.\n"
+        f"Error: `{type(e).__name__}`"
+    )
 
-        return
+    return
 
     # --------------------------------------------------------
     # NO RESULT
