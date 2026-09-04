@@ -1,29 +1,28 @@
 import os
+
 import discord
 from discord.ext import commands
 from dotenv import load_dotenv
 import wavelink
+from pathlib import Path
 
+# Paksa membaca .env yang berada satu folder dengan bot.py
+BASE_DIR = Path(__file__).resolve().parent
+ENV_FILE = BASE_DIR / ".env"
 
-# ============================================================
-# ENVIRONMENT
-# ============================================================
-
-load_dotenv()
+load_dotenv(ENV_FILE, override=True)
 
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 LAVALINK_PASSWORD = os.getenv("LAVALINK_PASSWORD", "wanmusic123")
+LAVALINK_URI = os.getenv("LAVALINK_URI", "").strip()
 
-# Pakai endpoint Public Networking Railway lo
-LAVALINK_URI = os.getenv(
-    "LAVALINK_URI",
-    "http://tokaido.proxy.rlwy.net:30072"
-)
+# Validasi LAVALINK_URI
+if not LAVALINK_URI:
+    print("❌ LAVALINK_URI tidak ditemukan di .env!")
+    raise SystemExit(1)
 
-# Bersihkan Markdown link jika ada
-if LAVALINK_URI.startswith("[") and "](" in LAVALINK_URI:
-    LAVALINK_URI = LAVALINK_URI.split("](")[1].rstrip(")")
-
+print("DEBUG .env:", ENV_FILE)
+print("DEBUG LAVALINK_URI:", repr(LAVALINK_URI))
 
 # ============================================================
 # INTENTS
@@ -41,13 +40,17 @@ intents.guilds = True
 # ============================================================
 
 class WanMusic(commands.Bot):
+    """Discord bot untuk memutar musik dengan Lavalink."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.lavalink_connected = False
 
     async def setup_hook(self):
+        """Setup Lavalink connection saat bot startup."""
+
         print("🔌 Connecting to Lavalink...")
-        print("   URI RAW:", repr(LAVALINK_URI))
-        print("   URI TYPE:", type(LAVALINK_URI))
-
-
+        print(f"   URI: {LAVALINK_URI!r}")
 
         try:
             node = wavelink.Node(
@@ -60,13 +63,15 @@ class WanMusic(commands.Bot):
                 client=self,
             )
 
-            print("✅ Berhasil terhubung ke Lavalink!")
+            self.lavalink_connected = True
+            print("✅ Lavalink connection berhasil!")
 
         except Exception as e:
             print(
                 f"❌ Gagal connect ke Lavalink: "
                 f"{type(e).__name__}: {e}"
             )
+            raise SystemExit(1)
 
 
 bot = WanMusic(
@@ -79,7 +84,16 @@ bot = WanMusic(
 # HELPER
 # ============================================================
 
-def get_player(guild: discord.Guild):
+def get_player(guild: discord.Guild) -> wavelink.Player | None:
+    """
+    Ambil player dari guild.
+    
+    Args:
+        guild: Discord guild object
+        
+    Returns:
+        wavelink.Player jika ada, None jika tidak
+    """
     player = guild.voice_client
 
     if isinstance(player, wavelink.Player):
@@ -91,6 +105,15 @@ def get_player(guild: discord.Guild):
 async def ensure_in_voice(
     interaction: discord.Interaction,
 ) -> wavelink.Player | None:
+    """
+    Pastikan user di voice channel dan bot connect ke channel tersebut.
+    
+    Args:
+        interaction: Discord interaction object
+        
+    Returns:
+        wavelink.Player jika berhasil, None jika gagal
+    """
 
     await interaction.response.defer()
 
@@ -187,10 +210,12 @@ async def ensure_in_voice(
 
 @bot.event
 async def on_ready():
+    """Event saat bot sudah siap."""
 
     print("=" * 50)
     print(f"🤖 Bot online sebagai: {bot.user}")
     print(f"🌐 Server: {len(bot.guilds)}")
+    print(f"🎵 Lavalink: {'✅ Connected' if bot.lavalink_connected else '❌ Not Connected'}")
     print("=" * 50)
 
     try:
@@ -208,17 +233,31 @@ async def on_ready():
 async def on_wavelink_node_ready(
     payload: wavelink.NodeReadyEventPayload
 ):
+    """Event saat Lavalink node ready."""
 
     print(
         f"🎵 Lavalink READY: "
         f"{payload.node.identifier}"
     )
+    bot.lavalink_connected = True
+
+
+@bot.event
+async def on_wavelink_node_closed(payload: wavelink.NodeClosedEventPayload):
+    """Event saat Lavalink node disconnect."""
+
+    print(
+        f"⚠️ Lavalink node closed: "
+        f"{payload.node.identifier}"
+    )
+    bot.lavalink_connected = False
 
 
 @bot.event
 async def on_wavelink_track_end(
     payload: wavelink.TrackEndEventPayload
 ):
+    """Event saat track selesai dimainkan."""
 
     player: wavelink.Player = payload.player
 
@@ -228,12 +267,7 @@ async def on_wavelink_track_end(
             f"{payload.track.title}"
         )
 
-    # --------------------------------------------------------
-    # PLAY NEXT QUEUE
-    # --------------------------------------------------------
-
     if not player.queue.is_empty:
-
         next_track = player.queue.get()
 
         print(
@@ -263,6 +297,7 @@ async def on_wavelink_track_end(
     description="Test apakah bot online"
 )
 async def ping(interaction: discord.Interaction):
+    """Ping command untuk test bot."""
 
     await interaction.response.send_message(
         "🎵 Djawa Adalah Koentji 👹👹"
@@ -278,82 +313,16 @@ async def ping(interaction: discord.Interaction):
     description="Bot masuk ke voice channel"
 )
 async def join(interaction: discord.Interaction):
+    """Bot masuk ke voice channel user."""
 
-    await interaction.response.defer()
-
-    guild = interaction.guild
-    member = interaction.user
-
-    if guild is None:
-        await interaction.followup.send(
-            "❌ Command hanya bisa digunakan di server."
-        )
-        return
-
-    if not isinstance(member, discord.Member):
-        await interaction.followup.send(
-            "❌ Tidak bisa membaca member."
-        )
-        return
-
-    if not member.voice or not member.voice.channel:
-        await interaction.followup.send(
-            "❌ Kamu harus berada di voice channel dulu!"
-        )
-        return
-
-    channel = member.voice.channel
-    player = get_player(guild)
+    player = await ensure_in_voice(interaction)
 
     if player is not None:
-
-        if player.channel == channel:
-
+        # Player sudah ada atau baru connect, pastikan di channel yang benar
+        if interaction.user.voice and interaction.user.voice.channel:
             await interaction.followup.send(
-                "🎵 Bot sudah ada di voice channel."
+                f"✅ Bot di **{player.channel.name}** 🎵"
             )
-
-        else:
-
-            try:
-                await player.move_to(channel)
-
-                await interaction.followup.send(
-                    f"🔄 Bot pindah ke "
-                    f"**{channel.name}**"
-                )
-
-            except Exception as e:
-
-                await interaction.followup.send(
-                    f"❌ Gagal pindah: "
-                    f"`{type(e).__name__}`"
-                )
-
-        return
-
-    try:
-
-        player = await channel.connect(
-            cls=wavelink.Player
-        )
-
-        await interaction.followup.send(
-            f"✅ Bot masuk ke "
-            f"**{channel.name}** 🎵"
-        )
-
-    except Exception as e:
-
-        print(
-            f"❌ Join error: "
-            f"{type(e).__name__}: {e}"
-        )
-
-        await interaction.followup.send(
-            f"❌ Gagal join: "
-            f"`{type(e).__name__}`"
-        )
 
 
 # ============================================================
@@ -365,6 +334,7 @@ async def join(interaction: discord.Interaction):
     description="Bot keluar dari voice channel"
 )
 async def leave(interaction: discord.Interaction):
+    """Bot keluar dari voice channel."""
 
     await interaction.response.defer()
 
@@ -385,7 +355,6 @@ async def leave(interaction: discord.Interaction):
         return
 
     try:
-
         await player.disconnect()
 
         await interaction.followup.send(
@@ -393,7 +362,6 @@ async def leave(interaction: discord.Interaction):
         )
 
     except Exception as e:
-
         await interaction.followup.send(
             f"❌ Error: `{type(e).__name__}`"
         )
@@ -411,6 +379,7 @@ async def play(
     interaction: discord.Interaction,
     lagu: str
 ):
+    """Cari dan putar musik dari SoundCloud atau URL."""
 
     player = await ensure_in_voice(interaction)
 
@@ -423,43 +392,15 @@ async def play(
     print(f"Query: {lagu}")
     print("=" * 60)
 
-    # ========================================================
-    # SEARCH
-    #
-    # IMPORTANT:
-    # YouTube TIDAK DIGUNAKAN.
-    #
-    # Lavalink config:
-    # youtube: false
-    #
-    # Jadi kita menggunakan SoundCloud.
-    # ========================================================
-
     try:
-
-        # ----------------------------------------------------
-        # Kalau user memberikan URL langsung
-        # ----------------------------------------------------
-
-        if lagu.startswith(
-            (
-                "http://",
-                "https://"
-            )
-        ):
-
+        # Direct URL
+        if lagu.startswith(("http://", "https://")):
             print("🌐 Loading direct URL...")
-
             results = await wavelink.Playable.search(lagu)
 
-        # ----------------------------------------------------
-        # Kalau user memberikan nama lagu
-        # ----------------------------------------------------
-
+        # SoundCloud search
         else:
-
             print("🔎 Searching SoundCloud...")
-
             results = await wavelink.Playable.search(
                 f"scsearch:{lagu}"
             )
@@ -470,7 +411,6 @@ async def play(
         )
 
     except Exception as e:
-
         print(
             f"❌ Search error: "
             f"{type(e).__name__}: {e}"
@@ -483,12 +423,11 @@ async def play(
 
         return
 
-    # ========================================================
+    # --------------------------------------------------------
     # NO RESULT
-    # ========================================================
+    # --------------------------------------------------------
 
     if not results:
-
         print("❌ No tracks found.")
 
         await interaction.followup.send(
@@ -499,52 +438,38 @@ async def play(
 
         return
 
-    # ========================================================
+    # --------------------------------------------------------
     # PLAYLIST
-    # ========================================================
+    # --------------------------------------------------------
 
     if isinstance(results, wavelink.Playlist):
-
         tracks = list(results.tracks)
 
         if not tracks:
-
             await interaction.followup.send(
                 "❌ Playlist kosong."
             )
-
             return
 
         print(
-            f"📋 Playlist: "
-            f"{results.name}"
+            f"📋 Playlist: {results.name}"
         )
 
         print(
-            f"🎵 Tracks: "
-            f"{len(tracks)}"
+            f"🎵 Tracks: {len(tracks)}"
         )
 
         try:
-
-            # Jika belum playing,
-            # langsung mainkan track pertama.
-
             if not player.playing:
-
                 first_track = tracks[0]
-
                 await player.play(first_track)
 
-                # Sisanya masuk queue
                 if len(tracks) > 1:
-
                     await player.queue.put_wait(
                         tracks[1:]
                     )
 
             else:
-
                 await player.queue.put_wait(
                     tracks
                 )
@@ -556,7 +481,6 @@ async def play(
             )
 
         except Exception as e:
-
             print(
                 f"❌ Playlist error: "
                 f"{type(e).__name__}: {e}"
@@ -569,30 +493,26 @@ async def play(
 
         return
 
-    # ========================================================
+    # --------------------------------------------------------
     # SINGLE TRACK
-    # ========================================================
+    # --------------------------------------------------------
 
     track = results[0]
 
     print(
-        f"🎵 Found: "
-        f"{track.title}"
+        f"🎵 Found: {track.title}"
     )
 
     print(
-        f"🆔 Identifier: "
-        f"{track.identifier}"
+        f"🆔 Identifier: {track.identifier}"
     )
 
-    # ========================================================
+    # --------------------------------------------------------
     # PLAYER ALREADY PLAYING
-    # ========================================================
+    # --------------------------------------------------------
 
     if player.playing:
-
         try:
-
             await player.queue.put_wait(track)
 
             print(
@@ -606,7 +526,6 @@ async def play(
             )
 
         except Exception as e:
-
             print(
                 f"❌ Queue error: "
                 f"{type(e).__name__}: {e}"
@@ -619,12 +538,11 @@ async def play(
 
         return
 
-    # ========================================================
+    # --------------------------------------------------------
     # START PLAYBACK
-    # ========================================================
+    # --------------------------------------------------------
 
     try:
-
         print(
             f"▶️ Starting playback: "
             f"{track.title}"
@@ -640,7 +558,6 @@ async def play(
         print("✅ Playback started.")
 
     except Exception as e:
-
         print(
             f"❌ Playback error: "
             f"{type(e).__name__}: {e}"
@@ -662,6 +579,7 @@ async def play(
     description="Stop musik"
 )
 async def stop(interaction: discord.Interaction):
+    """Hentikan musik dan kosongkan queue."""
 
     await interaction.response.defer()
 
@@ -682,9 +600,7 @@ async def stop(interaction: discord.Interaction):
         return
 
     try:
-
         player.queue.clear()
-
         await player.stop()
 
         await interaction.followup.send(
@@ -692,7 +608,6 @@ async def stop(interaction: discord.Interaction):
         )
 
     except Exception as e:
-
         await interaction.followup.send(
             f"❌ Error: `{type(e).__name__}`"
         )
@@ -707,6 +622,7 @@ async def stop(interaction: discord.Interaction):
     description="Pause music"
 )
 async def pause(interaction: discord.Interaction):
+    """Pause musik yang sedang diputar."""
 
     await interaction.response.defer()
 
@@ -733,7 +649,6 @@ async def pause(interaction: discord.Interaction):
         return
 
     try:
-
         await player.pause(True)
 
         await interaction.followup.send(
@@ -741,7 +656,6 @@ async def pause(interaction: discord.Interaction):
         )
 
     except Exception as e:
-
         await interaction.followup.send(
             f"❌ Error: `{type(e).__name__}`"
         )
@@ -756,6 +670,7 @@ async def pause(interaction: discord.Interaction):
     description="Resume music"
 )
 async def resume(interaction: discord.Interaction):
+    """Lanjutkan musik yang di-pause."""
 
     await interaction.response.defer()
 
@@ -782,7 +697,6 @@ async def resume(interaction: discord.Interaction):
         return
 
     try:
-
         await player.pause(False)
 
         await interaction.followup.send(
@@ -790,7 +704,6 @@ async def resume(interaction: discord.Interaction):
         )
 
     except Exception as e:
-
         await interaction.followup.send(
             f"❌ Error: `{type(e).__name__}`"
         )
@@ -805,6 +718,7 @@ async def resume(interaction: discord.Interaction):
     description="Skip lagu sekarang"
 )
 async def skip(interaction: discord.Interaction):
+    """Skip lagu yang sedang diputar."""
 
     await interaction.response.defer()
 
@@ -831,7 +745,6 @@ async def skip(interaction: discord.Interaction):
         return
 
     try:
-
         await player.skip()
 
         await interaction.followup.send(
@@ -839,7 +752,6 @@ async def skip(interaction: discord.Interaction):
         )
 
     except Exception as e:
-
         await interaction.followup.send(
             f"❌ Error: `{type(e).__name__}`"
         )
@@ -857,6 +769,7 @@ async def volume(
     interaction: discord.Interaction,
     level: int
 ):
+    """Set volume musik (0-100)."""
 
     await interaction.response.defer()
 
@@ -869,33 +782,33 @@ async def volume(
         return
 
     if level < 0 or level > 100:
-
         await interaction.followup.send(
             "❌ Volume harus antara 0-100."
         )
-
         return
 
     player = get_player(guild)
 
     if player is None:
-
         await interaction.followup.send(
             "❌ Bot tidak ada di voice channel."
         )
-
         return
 
     try:
-
-        await player.set_volume(level)
+        # Convert 0-100 ke 0.0-1.0 range untuk Wavelink
+        volume_float = level / 100.0
+        await player.set_volume(volume_float)
 
         await interaction.followup.send(
             f"🔊 Volume: **{level}%**"
         )
 
     except Exception as e:
-
+        print(
+            f"❌ Volume error: "
+            f"{type(e).__name__}: {e}"
+        )
         await interaction.followup.send(
             f"❌ Error: `{type(e).__name__}`"
         )
@@ -910,63 +823,73 @@ async def volume(
     description="Lihat queue musik"
 )
 async def queue_cmd(
-    interaction: discord.Interaction
+    interaction: discord.Interaction,
+    page: int = 1
 ):
+    """Lihat queue musik dengan pagination."""
 
     await interaction.response.defer()
 
     guild = interaction.guild
 
     if guild is None:
-
         await interaction.followup.send(
             "❌ Command hanya bisa digunakan di server."
         )
-
         return
 
     player = get_player(guild)
 
     if player is None:
-
         await interaction.followup.send(
             "❌ Bot tidak ada di voice channel."
         )
-
         return
 
     current = player.current
 
     if current:
-
         msg = (
             f"🎵 **Now Playing**\n"
             f"**{current.title}**\n\n"
         )
-
     else:
-
         msg = (
             "🎵 **Now Playing:** Tidak ada\n\n"
         )
 
     if player.queue.is_empty:
-
         msg += "📭 Queue kosong."
-
     else:
-
-        msg += "📋 **Queue:**\n"
-
+        queue_list = list(player.queue)
+        total_tracks = len(queue_list)
+        
+        # Pagination: 10 items per page
+        items_per_page = 10
+        max_pages = (total_tracks + items_per_page - 1) // items_per_page
+        
+        # Validasi page number
+        if page < 1:
+            page = 1
+        elif page > max_pages:
+            page = max_pages
+        
+        start_idx = (page - 1) * items_per_page
+        end_idx = start_idx + items_per_page
+        
+        msg += f"📋 **Queue (Halaman {page}/{max_pages} - Total {total_tracks} lagu):**\n"
+        
         for index, track in enumerate(
-            list(player.queue)[:10],
-            start=1
+            queue_list[start_idx:end_idx],
+            start=start_idx + 1
         ):
-
             msg += (
                 f"`{index}.` "
                 f"{track.title}\n"
             )
+        
+        if max_pages > 1:
+            msg += f"\n💡 Gunakan `/queue page:{page + 1}` untuk halaman berikutnya" if page < max_pages else ""
 
     await interaction.followup.send(msg)
 
@@ -982,27 +905,24 @@ async def queue_cmd(
 async def clear_queue(
     interaction: discord.Interaction
 ):
+    """Kosongkan semua queue musik."""
 
     await interaction.response.defer()
 
     guild = interaction.guild
 
     if guild is None:
-
         await interaction.followup.send(
             "❌ Command hanya bisa digunakan di server."
         )
-
         return
 
     player = get_player(guild)
 
     if player is None:
-
         await interaction.followup.send(
             "❌ Bot tidak ada di voice channel."
         )
-
         return
 
     player.queue.clear()
@@ -1017,11 +937,8 @@ async def clear_queue(
 # ============================================================
 
 if not DISCORD_TOKEN:
-
     print("❌ DISCORD_TOKEN tidak ditemukan!")
-
     raise SystemExit(1)
-
 
 print("🚀 Starting WanMusic...")
 
