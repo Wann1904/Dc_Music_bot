@@ -13,7 +13,7 @@ load_dotenv()
 
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 LAVALINK_PASSWORD = os.getenv("LAVALINK_PASSWORD", "youshallnotpass")
-LAVALINK_URI = os.getenv("LAVALINK_URI", "https://railwayservicelavalink-production.up.railway.app")
+LAVALINK_URI = os.getenv("LAVALINK_URI", "http://railwayservicelavalink-production.up.railway.app")
 
 
 # =========================
