@@ -934,4 +934,4 @@ if not DISCORD_TOKEN:
 
 print("🚀 Starting WanMusic...")
 
-bot.run(DISCORD_TOKEN)
+bot.run(DISCORD_TOKEN) 
