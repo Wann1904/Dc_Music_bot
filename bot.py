@@ -40,7 +40,10 @@ class WanMusic(commands.Bot):
 
     async def setup_hook(self):
         print("🔌 Connecting to Lavalink...")
-        print(f"   URI: {LAVALINK_URI}")
+        print("   URI RAW:", repr(LAVALINK_URI))
+        print("   URI TYPE:", type(LAVALINK_URI))
+
+
 
         try:
             node = wavelink.Node(
